@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECLIPSE — RPG</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0f;--ui:#12121a;--border:#2a2a3a;--accent:#e8c56d;--accent2:#6de8c5;
+  --hp:#e85d5d;--text:#d0d0e8;--muted:#5a5a7a;--shadow:rgba(0,0,0,0.8);
+}
+body{background:var(--bg);color:var(--text);font-family:'VT323',monospace;overflow:hidden;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+
+#screen{position:relative;width:640px;height:480px;overflow:hidden;border:3px solid var(--border);box-shadow:0 0 40px rgba(232,197,109,0.15),0 0 80px rgba(0,0,0,0.8)}
+
+canvas#game{display:block;image-rendering:pixelated}
+
+/* HUD */
+#hud{position:absolute;top:0;left:0;right:0;pointer-events:none;z-index:10}
+#hud-top{display:flex;justify-content:space-between;align-items:flex-start;padding:10px}
+.hud-box{background:rgba(10,10,15,0.85);border:2px solid var(--border);padding:8px 12px;backdrop-filter:blur(4px)}
+.hud-name{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent);margin-bottom:6px}
+.bar-row{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.bar-label{font-size:12px;color:var(--muted);width:20px}
+.bar-track{width:100px;height:8px;background:#1a1a2a;border:1px solid var(--border);position:relative}
+.bar-fill{height:100%;transition:width 0.3s}
+.bar-hp{background:linear-gradient(90deg,#c0392b,#e85d5d)}
+.bar-mp{background:linear-gradient(90deg,#2980b9,#6dc5e8)}
+.bar-xp{background:linear-gradient(90deg,#8e44ad,#c56de8)}
+.hud-gold{font-size:16px;color:var(--accent)}
+
+/* Minimap */
+#minimap{position:absolute;top:10px;right:10px;width:80px;height:80px;background:rgba(10,10,15,0.9);border:2px solid var(--border)}
+#minimap canvas{display:block;image-rendering:pixelated}
+
+/* Dialogue */
+#dialogue{position:absolute;bottom:0;left:0;right:0;background:rgba(8,8,14,0.97);border-top:3px solid var(--accent);padding:14px 18px;z-index:20;display:none;min-height:90px}
+#dialogue-name{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);margin-bottom:8px}
+#dialogue-text{font-size:18px;line-height:1.5;color:var(--text);min-height:40px}
+#dialogue-hint{font-size:12px;color:var(--muted);text-align:right;margin-top:6px;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* Inventory */
+#inventory{position:absolute;inset:0;background:rgba(5,5,10,0.97);z-index:30;display:none;flex-direction:column;padding:20px}
+#inventory h2{font-family:'Press Start 2P',monospace;font-size:10px;color:var(--accent);margin-bottom:16px;text-align:center}
+#inv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
+.inv-slot{background:var(--ui);border:2px solid var(--border);padding:10px;text-align:center;cursor:pointer;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color 0.2s;position:relative}
+.inv-slot:hover{border-color:var(--accent)}
+.inv-slot.equipped{border-color:var(--accent2)}
+.inv-icon{font-size:22px;margin-bottom:4px}
+.inv-name{font-size:11px;color:var(--text)}
+.inv-qty{position:absolute;bottom:3px;right:5px;font-size:11px;color:var(--muted)}
+#inv-desc{background:var(--ui);border:2px solid var(--border);padding:12px;font-size:15px;color:var(--text);min-height:60px}
+#inv-close{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--muted);text-align:center;margin-top:10px}
+
+/* Combat */
+#combat{position:absolute;inset:0;background:rgba(5,5,10,0.97);z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.combat-enemy-area{text-align:center}
+.combat-enemy-sprite{font-size:64px;margin-bottom:10px;animation:float 2s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.combat-enemy-name{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--hp)}
+.combat-enemy-bar{width:200px;height:12px;background:#1a1a2a;border:2px solid var(--border);margin:8px auto}
+.combat-enemy-fill{height:100%;background:linear-gradient(90deg,#8b0000,#e85d5d);transition:width 0.4s}
+.combat-log{background:var(--ui);border:2px solid var(--border);padding:10px 16px;font-size:16px;text-align:center;min-height:40px;width:300px;color:var(--accent2)}
+.combat-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.combat-btn{background:var(--ui);border:2px solid var(--border);color:var(--text);font-family:'VT323',monospace;font-size:18px;padding:8px 18px;cursor:pointer;transition:all 0.15s;min-width:80px}
+.combat-btn:hover{border-color:var(--accent);color:var(--accent)}
+.combat-btn:disabled{opacity:0.3;cursor:not-allowed}
+
+/* Notifications */
+#notif{position:absolute;top:80px;left:50%;transform:translateX(-50%);font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent);background:rgba(10,10,15,0.9);border:2px solid var(--accent);padding:6px 12px;z-index:50;opacity:0;transition:opacity 0.3s;pointer-events:none;white-space:nowrap}
+
+/* Controls hint */
+#controls-hint{position:absolute;bottom:0;left:0;right:0;background:rgba(10,10,15,0.7);font-size:11px;color:var(--muted);text-align:center;padding:3px;z-index:10;pointer-events:none}
+
+/* Title screen */
+#title{position:absolute;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+#title h1{font-family:'Press Start 2P',monospace;font-size:22px;color:var(--accent);text-shadow:0 0 20px rgba(232,197,109,0.5);letter-spacing:4px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{text-shadow:0 0 20px rgba(232,197,109,0.5)}50%{text-shadow:0 0 40px rgba(232,197,109,0.9)}}
+#title p{font-size:20px;color:var(--accent2);letter-spacing:2px}
+#title .story{font-size:14px;color:var(--muted);max-width:400px;text-align:center;line-height:1.8}
+#title button{font-family:'Press Start 2P',monospace;font-size:9px;background:transparent;border:2px solid var(--accent);color:var(--accent);padding:12px 24px;cursor:pointer;animation:blink 1.5s infinite;letter-spacing:2px}
+#title button:hover{background:var(--accent);color:var(--bg)}
+
+/* Level up */
+#levelup{position:absolute;inset:0;background:rgba(5,5,10,0.95);z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#levelup h2{font-family:'Press Start 2P',monospace;font-size:14px;color:var(--accent);animation:pulse 1s infinite}
+#levelup p{font-size:20px;color:var(--accent2)}
+#levelup button{font-family:'Press Start 2P',monospace;font-size:8px;background:transparent;border:2px solid var(--accent);color:var(--accent);padding:10px 20px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="screen">
+  <canvas id="game" width="640" height="480"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hud-top">
+      <div class="hud-box">
+        <div class="hud-name" id="hud-name">KAEL</div>
+        <div class="bar-row"><span class="bar-label">HP</span><div class="bar-track"><div class="bar-fill bar-hp" id="bar-hp" style="width:100%"></div></div><span id="hp-txt" style="font-size:12px;color:#e85d5d">30/30</span></div>
+        <div class="bar-row"><span class="bar-label">MP</span><div class="bar-track"><div class="bar-fill bar-mp" id="bar-mp" style="width:100%"></div></div><span id="mp-txt" style="font-size:12px;color:#6dc5e8">20/20</span></div>
+        <div class="bar-row"><span class="bar-label">XP</span><div class="bar-track"><div class="bar-fill bar-xp" id="bar-xp" style="width:0%"></div></div><span id="xp-txt" style="font-size:12px;color:#c56de8">0/50</span></div>
+      </div>
+      <div class="hud-box">
+        <div class="hud-name">INVENTÁRIO [I]</div>
+        <div class="hud-gold">🪙 <span id="gold-txt">0</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Arma: <span id="weapon-txt" style="color:var(--accent2)">Punhos</span></div>
+        <div style="font-size:12px;color:var(--muted)">Nível: <span id="level-txt" style="color:var(--accent)">1</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="minimap"><canvas id="minimap-canvas" width="80" height="80"></canvas></div>
+
+  <div id="dialogue">
+    <div id="dialogue-name"></div>
+    <div id="dialogue-text"></div>
+    <div id="dialogue-hint">[ ESPAÇO para continuar ]</div>
+  </div>
+
+  <div id="inventory">
+    <h2>⚔ INVENTÁRIO ⚔</h2>
+    <div id="inv-grid"></div>
+    <div id="inv-desc">Selecione um item para ver detalhes.</div>
+    <div id="inv-close">[ I ] para fechar</div>
+  </div>
+
+  <div id="combat">
+    <div class="combat-enemy-area">
+      <div id="combat-sprite" class="combat-enemy-sprite">👾</div>
+      <div id="combat-enemy-name" class="combat-enemy-name">INIMIGO</div>
+      <div class="combat-enemy-bar"><div class="combat-enemy-fill" id="combat-enemy-bar" style="width:100%"></div></div>
+      <div style="font-size:12px;color:var(--muted)" id="combat-enemy-hp">HP: 20/20</div>
+    </div>
+    <div id="combat-log" class="combat-log">O que você vai fazer?</div>
+    <div class="combat-actions">
+      <button class="combat-btn" id="btn-attack" onclick="combatAction('attack')">⚔ Atacar</button>
+      <button class="combat-btn" id="btn-magic" onclick="combatAction('magic')">✨ Magia</button>
+      <button class="combat-btn" id="btn-item" onclick="combatAction('item')">🧪 Poção</button>
+      <button class="combat-btn" id="btn-flee" onclick="combatAction('flee')">💨 Fugir</button>
+    </div>
+  </div>
+
+  <div id="levelup">
+    <h2>✨ SUBIU DE NÍVEL! ✨</h2>
+    <p id="levelup-text"></p>
+    <button onclick="closeLevelUp()">CONTINUAR</button>
+  </div>
+
+  <div id="notif"></div>
+  <div id="controls-hint">WASD/Setas: mover | ESPAÇO: interagir | I: inventário</div>
+
+  <!-- Title Screen -->
+  <div id="title">
+    <h1>ECLIPSE</h1>
+    <p>— Uma Jornada nas Ruínas —</p>
+    <div class="story">Você é Kael, o último guardião de Aethon. A cidade foi tomada pelas sombras. Encontre as 3 Gemas do Eclipse antes que a escuridão consuma tudo...</div>
+    <button onclick="startGame()">▶ INICIAR JORNADA</button>
+  </div>
+</div>
+
+<script>
+// ===================== ENGINE =====================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const TILE = 32;
+const COLS = 20, ROWS = 15;
+
+// ===================== MAPS =====================
+// 0=grass, 1=wall, 2=water, 3=path, 4=door, 5=chest, 6=stairs_up, 7=deep_wall, 8=sand, 9=tree
+const MAPS = {
+  village: {
+    name: "Vila de Aethon",
+    music: "peaceful",
+    data: [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,9,9,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,1,0,0,0,0,9,9,0,0,1,1,1,0,0,0,1],
+      [1,0,1,0,4,0,3,3,3,3,3,3,3,4,0,1,0,0,0,1],
+      [1,0,1,1,1,0,3,0,0,0,0,0,0,1,1,1,0,0,0,1],
+      [1,0,0,0,0,0,3,0,5,0,0,5,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,4,0,3,0,0,0,0,0,0,0,4,1,1,0,0,1],
+      [1,0,1,0,0,0,3,0,0,0,0,0,0,0,0,0,1,0,0,1],
+      [1,0,1,1,1,0,3,3,3,3,6,3,3,3,1,1,1,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,9,9,0,0,0,0,0,0,9,9,0,0,0,0,0,1],
+      [1,0,0,0,9,9,0,2,2,2,2,2,9,9,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,2,2,2,2,2,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    npcs: [
+      {id:'elder', x:6*TILE, y:5*TILE, sprite:'🧙', name:'Ancião Boreth', color:'#c56de8',
+       dialogues:[
+         "Kael! Finalmente chegou. A profecia se cumpre...",
+         "As 3 Gemas do Eclipse foram espalhadas pelos inimigos.",
+         "Você deve encontrar a Gema Vermelha nas Ruínas do Norte.",
+         "Tome esta espada. Que Aethon te proteja, guardião.",
+       ], gives:{type:'weapon',id:'iron_sword'}},
+      {id:'merchant', x:14*TILE, y:7*TILE, sprite:'🛒', name:'Mercante Dora', color:'#e8c56d',
+       dialogues:[
+         "Psst! Tenho coisas raras pra vender...",
+         "Uma Poção de Vida por 10 moedas. Quer?",
+       ], sells:{id:'health_potion', price:10}},
+      {id:'guard', x:10*TILE, y:2*TILE, sprite:'💂', name:'Guarda Venn', color:'#6de8c5',
+       dialogues:[
+         "Ei! Cuidado nas ruínas ao norte.",
+         "Os Goblin Rangers estão se multiplicando...",
+         "Mas se você precisar de ajuda... não vai achar aqui.",
+       ]},
+    ],
+    enemies: [
+      {x:16*TILE, y:11*TILE, type:'slime'},
+      {x:17*TILE, y:12*TILE, type:'slime'},
+    ],
+    items: [],
+    chests: [
+      {x:8*TILE, y:5*TILE, opened:false, contains:{id:'health_potion', qty:2}},
+      {x:11*TILE, y:5*TILE, opened:false, contains:{id:'gold', qty:25}},
+    ],
+  },
+  ruins: {
+    name: "Ruínas do Norte",
+    music: "tense",
+    data: [
+      [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7],
+      [7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,7],
+      [7,8,7,7,8,8,7,7,7,8,8,7,7,7,8,8,7,7,8,7],
+      [7,8,7,8,8,8,8,8,7,8,8,7,8,8,8,8,8,7,8,7],
+      [7,8,8,8,8,7,8,8,8,8,7,8,8,8,8,7,8,8,8,7],
+      [7,8,7,8,8,8,8,7,8,8,8,8,7,8,8,8,8,7,8,7],
+      [7,8,8,8,7,8,8,8,8,5,8,8,8,8,5,8,8,8,8,7],
+      [7,8,7,8,8,8,7,8,8,8,8,8,7,8,8,8,7,8,8,7],
+      [7,8,8,7,8,8,8,8,7,8,8,7,8,8,8,8,8,8,8,7],
+      [7,8,8,8,8,7,8,8,8,8,8,8,8,7,8,8,7,8,8,7],
+      [7,8,7,8,8,8,8,8,7,8,5,8,8,8,8,7,8,8,8,7],
+      [7,8,8,8,8,8,8,7,8,8,8,8,8,8,8,8,8,8,8,7],
+      [7,8,8,7,8,8,8,8,8,8,8,8,8,8,7,8,8,8,8,7],
+      [7,8,8,8,8,8,8,8,8,6,8,8,8,8,8,8,8,8,8,7],
+      [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7],
+    ],
+    npcs: [
+      {id:'ghost', x:10*TILE, y:6*TILE, sprite:'👻', name:'Espírito Antigo', color:'#aaaaff',
+       dialogues:[
+         "...quem osa entrar nas ruínas sagradas...",
+         "A Gema Vermelha está guardada pelo Chefe Goblin.",
+         "Derrote-o no centro das ruínas e ela será sua.",
+         "Mas cuidado... ele é mais forte do que parece.",
+       ]},
+    ],
+    enemies: [
+      {x:5*TILE, y:3*TILE, type:'goblin'},
+      {x:12*TILE, y:4*TILE, type:'goblin'},
+      {x:3*TILE, y:8*TILE, type:'goblin'},
+      {x:15*TILE, y:9*TILE, type:'goblin'},
+      {x:9*TILE, y:5*TILE, type:'goblin_chief'},
+    ],
+    items:[],
+    chests:[
+      {x:9*TILE, y:6*TILE, opened:false, contains:{id:'red_gem', qty:1}},
+      {x:14*TILE, y:6*TILE, opened:false, contains:{id:'gold', qty:50}},
+      {x:10*TILE, y:10*TILE, opened:false, contains:{id:'mana_potion', qty:2}},
+    ],
+  }
+};
+
+// ===================== ITEMS DB =====================
+const ITEMS_DB = {
+  health_potion: {name:'Poção de Vida', icon:'🧪', desc:'Restaura 15 HP.', type:'consumable', effect:{hp:15}},
+  mana_potion:   {name:'Poção de Mana', icon:'💧', desc:'Restaura 10 MP.', type:'consumable', effect:{mp:10}},
+  iron_sword:    {name:'Espada de Ferro', icon:'⚔️', desc:'ATK +8. Forjada pelos guardiões.', type:'weapon', atk:8},
+  fire_staff:    {name:'Cajado de Fogo', icon:'🔥', desc:'ATK +5. Magia +12.', type:'weapon', atk:5, matk:12},
+  red_gem:       {name:'Gema Vermelha', icon:'💎', desc:'Uma das 3 Gemas do Eclipse. Pulsa com energia antiga.', type:'quest'},
+  gold:          {name:'Moedas', icon:'🪙', desc:'Moeda corrente de Aethon.', type:'gold'},
+  leather_armor: {name:'Armadura de Couro', icon:'🛡️', desc:'DEF +5. Proteção básica.', type:'armor', def:5},
+};
+
+// ===================== ENEMIES DB =====================
+const ENEMIES_DB = {
+  slime:        {name:'Slime Sombrio', sprite:'🟢', hp:12, atk:4, def:1, xp:10, gold:5, drops:['health_potion']},
+  goblin:       {name:'Goblin Ranger', sprite:'👺', hp:20, atk:8, def:3, xp:20, gold:12, drops:['health_potion','mana_potion']},
+  goblin_chief: {name:'Chefe Goblin', sprite:'👹', hp:50, atk:15, def:6, xp:60, gold:40, drops:['red_gem','leather_armor'], boss:true},
+};
+
+// ===================== PLAYER =====================
+const player = {
+  x: 9*TILE, y: 9*TILE,
+  speed: 3,
+  dir: 'down',
+  anim: 0,
+  hp: 30, maxHp: 30,
+  mp: 20, maxMp: 20,
+  atk: 5, def: 2,
+  xp: 0, xpNext: 50,
+  level: 1,
+  gold: 0,
+  weapon: null,
+  armor: null,
+  inventory: [],
+  gems: [],
+};
+
+// ===================== GAME STATE =====================
+let currentMap = 'village';
+let mapData = null;
+let npcs = [];
+let enemies = [];
+let chests = [];
+let keys = {};
+let gameState = 'title'; // title, explore, dialogue, combat, inventory, levelup
+let dialogueQueue = [];
+let dialogueIndex = 0;
+let currentNPC = null;
+let combatEnemy = null;
+let playerTurn = true;
+let combatBusy = false;
+let cameraX = 0, cameraY = 0;
+let particles = [];
+let floatingTexts = [];
+let lastTime = 0;
+
+// ===================== LOAD MAP =====================
+function loadMap(mapId, startX, startY) {
+  currentMap = mapId;
+  const m = MAPS[mapId];
+  mapData = m.data;
+  npcs = m.npcs.map(n => ({...n, dialogueIdx:0, dead:false}));
+  enemies = m.enemies.map((e,i) => {
+    const db = ENEMIES_DB[e.type];
+    return {...e, ...db, id:i, currentHp:db.hp, dead:false, moveTimer:0};
+  });
+  chests = m.chests.map(c => ({...c}));
+  if (startX !== undefined) { player.x = startX; player.y = startY; }
+}
+
+// ===================== TILE COLORS =====================
+const TILE_COLORS = {
+  0:'#2d5a1b', 1:'#4a4060', 2:'#1a4a7a', 3:'#8a7a5a',
+  4:'#7a5a3a', 5:'#8a6030', 6:'#c0a060', 7:'#3a3048',
+  8:'#c4a96a', 9:'#1a6010',
+};
+const TILE_DECOR = {
+  0: (x,y,tw)=>{
+    ctx.fillStyle='#3d7a25';
+    if((x+y)%3===0){ctx.fillRect(x+4,y+8,3,8);ctx.fillRect(x+10,y+6,3,10);}
+  },
+  2: (x,y)=>{
+    ctx.fillStyle='rgba(100,180,255,0.3)';
+    ctx.fillRect(x,y,TILE,TILE);
+  },
+  9: (x,y)=>{
+    ctx.fillStyle='#1a6010';ctx.beginPath();ctx.arc(x+TILE/2,y+TILE/2,11,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#2a8020';ctx.beginPath();ctx.arc(x+TILE/2,y+TILE/2-3,8,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#4a3020';ctx.fillRect(x+TILE/2-2,y+TILE-8,4,8);
+  },
+};
+
+// ===================== DRAW TILE =====================
+function drawTile(tile, px, py) {
+  ctx.fillStyle = TILE_COLORS[tile] || '#333';
+  ctx.fillRect(px, py, TILE, TILE);
+  if(TILE_DECOR[tile]) TILE_DECOR[tile](px,py,TILE);
+  // Tile-specific overlays
+  if(tile===1||tile===7){
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    ctx.fillRect(px,py+TILE-6,TILE,6);
+    ctx.fillStyle='rgba(255,255,255,0.05)';
+    ctx.fillRect(px,py,TILE,3);
+  }
+  if(tile===4){ // door
+    ctx.fillStyle='#5a3a1a';ctx.fillRect(px+6,py+4,TILE-12,TILE-4);
+    ctx.fillStyle='#8a6030';ctx.fillRect(px+8,py+6,TILE-16,TILE-10);
+    ctx.fillStyle='#c8a060';ctx.beginPath();ctx.arc(px+TILE/2,py+TILE/2,3,0,Math.PI*2);ctx.fill();
+  }
+  if(tile===5){ // chest
+    ctx.fillStyle='#6a4020';ctx.fillRect(px+4,py+8,TILE-8,TILE-12);
+    ctx.fillStyle='#8a6030';ctx.fillRect(px+4,py+8,TILE-8,6);
+    ctx.fillStyle='#c8a060';ctx.fillRect(px+TILE/2-3,py+10,6,4);
+  }
+  if(tile===6){ // stairs
+    ctx.fillStyle='#a08040';
+    for(let i=0;i<4;i++) ctx.fillRect(px+i*4,py+TILE-8+i*2,TILE-i*8,3);
+    ctx.fillStyle='#e8c06a';ctx.font='14px serif';ctx.fillText('▼',px+10,py+TILE-4);
+  }
+}
+
+// ===================== DRAW SPRITE =====================
+function drawSprite(emoji, px, py, size=22) {
+  ctx.font = `${size}px serif`;
+  ctx.fillText(emoji, px, py);
+}
+
+// ===================== DRAW PLAYER =====================
+function drawPlayer() {
+  const px = player.x - cameraX;
+  const py = player.y - cameraY;
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.beginPath();ctx.ellipse(px+TILE/2,py+TILE-4,10,5,0,0,Math.PI*2);ctx.fill();
+  // Body
+  const bob = Math.sin(player.anim*0.15)*2;
+  ctx.font='22px serif';
+  const sprites = {down:'🧙',up:'🧙',left:'🧙',right:'🧙'};
+  ctx.fillText('🧙', px+5, py+TILE-4+bob);
+  // Weapon glow if equipped
+  if(player.weapon){
+    ctx.fillStyle='rgba(232,197,109,0.4)';
+    ctx.beginPath();ctx.arc(px+TILE/2,py+TILE/2,14,0,Math.PI*2);ctx.fill();
+  }
+}
+
+// ===================== CAMERA =====================
+function updateCamera() {
+  const targetX = player.x - canvas.width/2 + TILE/2;
+  const targetY = player.y - canvas.height/2 + TILE/2;
+  const maxX = COLS*TILE - canvas.width;
+  const maxY = ROWS*TILE - canvas.height;
+  cameraX += (targetX - cameraX) * 0.12;
+  cameraY += (targetY - cameraY) * 0.12;
+  cameraX = Math.max(0, Math.min(maxX, cameraX));
+  cameraY = Math.max(0, Math.min(maxY, cameraY));
+}
+
+// ===================== COLLISION =====================
+function isWalkable(x, y) {
+  const col = Math.floor(x / TILE);
+  const row = Math.floor(y / TILE);
+  if(col<0||col>=COLS||row<0||row>=ROWS) return false;
+  const t = mapData[row][col];
+  return t!==1 && t!==2 && t!==7 && t!==9;
+}
+
+function canMove(nx, ny) {
+  const margin = 4;
+  return isWalkable(nx+margin, ny+margin) &&
+         isWalkable(nx+TILE-margin-1, ny+margin) &&
+         isWalkable(nx+margin, ny+TILE-margin-1) &&
+         isWalkable(nx+TILE-margin-1, ny+TILE-margin-1);
+}
+
+// ===================== MOVEMENT =====================
+function movePlayer(dt) {
+  if(gameState !== 'explore') return;
+  let dx=0, dy=0;
+  if(keys['ArrowUp']||keys['w']||keys['W']) dy=-1;
+  if(keys['ArrowDown']||keys['s']||keys['S']) dy=1;
+  if(keys['ArrowLeft']||keys['a']||keys['A']) dx=-1;
+  if(keys['ArrowRight']||keys['d']||keys['D']) dx=1;
+  if(dx||dy){
+    player.anim++;
+    const nx = player.x + dx*player.speed;
+    const ny = player.y + dy*player.speed;
+    if(canMove(nx, player.y)) player.x = nx;
+    if(canMove(player.x, ny)) player.y = ny;
+    if(dx<0) player.dir='left';
+    if(dx>0) player.dir='right';
+    if(dy<0) player.dir='up';
+    if(dy>0) player.dir='down';
+  }
+  // Check tile interactions
+  checkTileEvents();
+  // Check enemy collision
+  checkEnemyCollision();
+}
+
+function checkTileEvents() {
+  const col = Math.floor((player.x+TILE/2)/TILE);
+  const row = Math.floor((player.y+TILE/2)/TILE);
+  const t = mapData[row] && mapData[row][col];
+  if(t===6){
+    if(currentMap==='village'){
+      notify('Entrando nas Ruínas do Norte...');
+      setTimeout(()=>{loadMap('ruins',9*TILE,13*TILE);},500);
+    } else {
+      notify('Voltando para a Vila...');
+      setTimeout(()=>{loadMap('village',9*TILE,9*TILE);},500);
+    }
+    mapData[row][col]=3;
+  }
+}
+
+function checkEnemyCollision() {
+  enemies.forEach(e => {
+    if(e.dead) return;
+    const dist = Math.hypot(player.x-e.x, player.y-e.y);
+    if(dist < TILE*0.8){
+      startCombat(e);
+    }
+  });
+}
+
+// ===================== NPC INTERACTION =====================
+function checkInteract() {
+  if(gameState==='dialogue'){
+    advanceDialogue();
+    return;
+  }
+  if(gameState!=='explore') return;
+
+  // Check NPCs
+  for(const npc of npcs){
+    if(npc.dead) continue;
+    const dist = Math.hypot(player.x-npc.x, player.y-npc.y);
+    if(dist < TILE*1.3){
+      currentNPC = npc;
+      const lines = npc.dialogues;
+      dialogueQueue = lines;
+      dialogueIndex = 0;
+      openDialogue(npc.name, lines[0]);
+      return;
+    }
+  }
+
+  // Check chests
+  for(const chest of chests){
+    if(chest.opened) continue;
+    const dist = Math.hypot(player.x-chest.x, player.y-chest.y);
+    if(dist < TILE*1.4){
+      openChest(chest);
+      return;
+    }
+  }
+}
+
+function openDialogue(name, text) {
+  gameState='dialogue';
+  document.getElementById('dialogue').style.display='block';
+  document.getElementById('dialogue-name').textContent=name;
+  typeText(text);
+}
+
+function typeText(text) {
+  const el = document.getElementById('dialogue-text');
+  el.textContent='';
+  let i=0;
+  const interval = setInterval(()=>{
+    el.textContent+=text[i];
+    i++;
+    if(i>=text.length) clearInterval(interval);
+  },30);
+}
+
+function advanceDialogue() {
+  dialogueIndex++;
+  if(dialogueIndex < dialogueQueue.length){
+    typeText(dialogueQueue[dialogueIndex]);
+  } else {
+    closeDialogue();
+    if(currentNPC && currentNPC.gives && !currentNPC._gave){
+      currentNPC._gave = true;
+      const item = currentNPC.gives;
+      addToInventory(item.id, 1);
+      notify(`Recebeu: ${ITEMS_DB[item.id].name}!`);
+      if(item.id==='iron_sword'){
+        player.weapon='iron_sword';
+        player.atk = 5 + ITEMS_DB['iron_sword'].atk;
+        document.getElementById('weapon-txt').textContent='Espada de Ferro';
+      }
+    }
+  }
+}
+
+function closeDialogue() {
+  gameState='explore';
+  document.getElementById('dialogue').style.display='none';
+  currentNPC=null;
+}
+
+// ===================== CHEST =====================
+function openChest(chest) {
+  chest.opened=true;
+  const item = chest.contains;
+  if(item.id==='gold'){
+    player.gold+=item.qty;
+    document.getElementById('gold-txt').textContent=player.gold;
+    notify(`Encontrou ${item.qty} moedas!`);
+    spawnParticles(chest.x, chest.y, '#e8c56d', 12);
+  } else {
+    addToInventory(item.id, item.qty||1);
+    notify(`Encontrou: ${ITEMS_DB[item.id].name}!`);
+    spawnParticles(chest.x, chest.y, '#6de8c5', 12);
+  }
+}
+
+// ===================== INVENTORY =====================
+function addToInventory(id, qty=1) {
+  const existing = player.inventory.find(i=>i.id===id);
+  if(existing) existing.qty+=qty;
+  else player.inventory.push({id, qty});
+}
+
+function openInventory() {
+  gameState='inventory';
+  document.getElementById('inventory').style.display='flex';
+  renderInventory();
+}
+
+function closeInventory() {
+  gameState='explore';
+  document.getElementById('inventory').style.display='none';
+}
+
+function renderInventory() {
+  const grid = document.getElementById('inv-grid');
+  grid.innerHTML='';
+  const slots = 10;
+  for(let i=0;i<slots;i++){
+    const item = player.inventory[i];
+    const slot = document.createElement('div');
+    slot.className='inv-slot'+(item && player.weapon===item.id ? ' equipped':'');
+    if(item){
+      const db = ITEMS_DB[item.id];
+      slot.innerHTML=`<div class="inv-icon">${db.icon}</div><div class="inv-name">${db.name}</div>${item.qty>1?`<div class="inv-qty">×${item.qty}</div>`:''}`;
+      slot.onclick=()=>useItem(item,slot);
+      slot.onmouseenter=()=>{
+        document.getElementById('inv-desc').innerHTML=`<b>${db.icon} ${db.name}</b><br>${db.desc}${db.type==='consumable'?'<br><span style="color:var(--accent2)">[ ENTER para usar ]</span>':''}`;
+      };
+    }
+    grid.appendChild(slot);
+  }
+}
+
+function useItem(item, slot) {
+  const db = ITEMS_DB[item.id];
+  if(db.type==='consumable'){
+    if(db.effect.hp){
+      player.hp=Math.min(player.maxHp, player.hp+db.effect.hp);
+      updateHUD();
+      notify(`+${db.effect.hp} HP!`);
+    }
+    if(db.effect.mp){
+      player.mp=Math.min(player.maxMp, player.mp+db.effect.mp);
+      updateHUD();
+      notify(`+${db.effect.mp} MP!`);
+    }
+    item.qty--;
+    if(item.qty<=0) player.inventory=player.inventory.filter(i=>i.id!==item.id);
+    renderInventory();
+  } else if(db.type==='weapon'){
+    player.weapon=item.id;
+    player.atk=5+(db.atk||0);
+    document.getElementById('weapon-txt').textContent=db.name;
+    notify(`Equipou: ${db.name}!`);
+    renderInventory();
+  } else if(db.type==='armor'){
+    player.armor=item.id;
+    player.def=2+(db.def||0);
+    notify(`Equipou: ${db.name}!`);
+    renderInventory();
+  } else if(db.type==='quest'){
+    notify(`${db.name} — item da missão!`);
+  }
+}
+
+// ===================== COMBAT =====================
+function startCombat(enemy) {
+  combatEnemy = enemy;
+  playerTurn = true;
+  combatBusy = false;
+  gameState = 'combat';
+  document.getElementById('combat').style.display='flex';
+  document.getElementById('combat-sprite').textContent=enemy.sprite;
+  document.getElementById('combat-enemy-name').textContent=enemy.name+(enemy.boss?' [CHEFE]':'');
+  document.getElementById('combat-enemy-bar').style.width='100%';
+  document.getElementById('combat-enemy-hp').textContent=`HP: ${enemy.currentHp}/${enemy.hp}`;
+  document.getElementById('combat-log').textContent=`${enemy.name} apareceu!`;
+  setBtnsEnabled(true);
+  if(enemy.boss) spawnParticles(enemy.x,enemy.y,'#ff4444',20);
+}
+
+function setBtnsEnabled(v){
+  ['btn-attack','btn-magic','btn-item','btn-flee'].forEach(id=>{
+    document.getElementById(id).disabled=!v;
+  });
+}
+
+function combatAction(action) {
+  if(!playerTurn||combatBusy) return;
+  combatBusy=true;
+  setBtnsEnabled(false);
+
+  if(action==='attack'){
+    const atk = player.atk;
+    const dmg = Math.max(1, atk - combatEnemy.def + Math.floor(Math.random()*4));
+    combatEnemy.currentHp -= dmg;
+    document.getElementById('combat-log').textContent=`Você atacou! Causou ${dmg} de dano!`;
+    document.getElementById('combat-sprite').style.animation='none';
+    setTimeout(()=>{ document.getElementById('combat-sprite').style.animation=''; },200);
+  } else if(action==='magic'){
+    if(player.mp < 5){ document.getElementById('combat-log').textContent='MP insuficiente!'; combatBusy=false; setBtnsEnabled(true); return; }
+    player.mp -= 5;
+    const dmg = Math.floor(player.atk*1.8 + Math.random()*6);
+    combatEnemy.currentHp -= dmg;
+    document.getElementById('combat-log').textContent=`✨ Magia! Causou ${dmg} de dano mágico!`;
+    updateHUD();
+  } else if(action==='item'){
+    const potion = player.inventory.find(i=>i.id==='health_potion');
+    if(!potion){ document.getElementById('combat-log').textContent='Sem poções!'; combatBusy=false; setBtnsEnabled(true); return; }
+    potion.qty--;
+    if(potion.qty<=0) player.inventory=player.inventory.filter(i=>i.id!=='health_potion');
+    player.hp=Math.min(player.maxHp, player.hp+15);
+    document.getElementById('combat-log').textContent='Usou Poção de Vida! +15 HP!';
+    updateHUD();
+  } else if(action==='flee'){
+    if(Math.random()<0.5){
+      document.getElementById('combat-log').textContent='Conseguiu fugir!';
+      setTimeout(closeCombat, 800);
+      return;
+    } else {
+      document.getElementById('combat-log').textContent='Falhou ao fugir!';
+    }
+  }
+
+  updateCombatBars();
+
+  if(combatEnemy.currentHp<=0){
+    document.getElementById('combat-log').textContent=`${combatEnemy.name} foi derrotado!`;
+    setTimeout(()=>{ enemyDied(); },1200);
+    return;
+  }
+
+  setTimeout(enemyTurn, 900);
+}
+
+function enemyTurn() {
+  const dmg = Math.max(1, combatEnemy.atk - player.def + Math.floor(Math.random()*3));
+  player.hp -= dmg;
+  document.getElementById('combat-log').textContent=`${combatEnemy.name} atacou! Você sofreu ${dmg} de dano!`;
+  updateHUD();
+  combatBusy=false;
+
+  if(player.hp<=0){
+    player.hp=1; updateHUD();
+    document.getElementById('combat-log').textContent='Você quase morreu! Fugiu por instinto...';
+    setTimeout(()=>{ closeCombat(); notify('Você sobreviveu por pouco!'); },1200);
+    return;
+  }
+  setBtnsEnabled(true);
+}
+
+function updateCombatBars() {
+  const pct = Math.max(0, combatEnemy.currentHp/combatEnemy.hp*100);
+  document.getElementById('combat-enemy-bar').style.width=pct+'%';
+  document.getElementById('combat-enemy-hp').textContent=`HP: ${Math.max(0,combatEnemy.currentHp)}/${combatEnemy.hp}`;
+}
+
+function enemyDied() {
+  combatEnemy.dead=true;
+  const xp = combatEnemy.xp;
+  const gold = combatEnemy.gold + Math.floor(Math.random()*combatEnemy.gold*0.5);
+  player.xp += xp;
+  player.gold += gold;
+  document.getElementById('gold-txt').textContent=player.gold;
+  spawnParticles(combatEnemy.x, combatEnemy.y, '#e8c56d', 15);
+
+  // Drops
+  if(combatEnemy.drops && Math.random()<0.4){
+    const drop = combatEnemy.drops[Math.floor(Math.random()*combatEnemy.drops.length)];
+    addToInventory(drop, 1);
+    notify(`+${xp}XP +${gold}M67 | Dropp: ${ITEMS_DB[drop].name}!`);
+  } else {
+    notify(`+${xp} XP  +${gold} Moedas!`);
+  }
+
+  checkLevelUp();
+  closeCombat();
+}
+
+function checkLevelUp() {
+  if(player.xp >= player.xpNext){
+    player.level++;
+    player.xp -= player.xpNext;
+    player.xpNext = Math.floor(player.xpNext*1.6);
+    player.maxHp += 10; player.hp = player.maxHp;
+    player.maxMp += 5; player.mp = player.maxMp;
+    player.atk += 2; player.def += 1;
+    document.getElementById('level-txt').textContent=player.level;
+    document.getElementById('levelup-text').textContent=`Nível ${player.level}! HP +10, MP +5, ATK +2`;
+    document.getElementById('levelup').style.display='flex';
+    gameState='levelup';
+    updateHUD();
+  }
+  updateHUD();
+}
+
+function closeLevelUp() {
+  document.getElementById('levelup').style.display='none';
+  gameState='explore';
+}
+
+function closeCombat() {
+  document.getElementById('combat').style.display='none';
+  gameState='explore';
+  combatEnemy=null;
+  combatBusy=false;
+}
+
+// ===================== HUD =====================
+function updateHUD() {
+  document.getElementById('bar-hp').style.width=(player.hp/player.maxHp*100)+'%';
+  document.getElementById('hp-txt').textContent=`${player.hp}/${player.maxHp}`;
+  document.getElementById('bar-mp').style.width=(player.mp/player.maxMp*100)+'%';
+  document.getElementById('mp-txt').textContent=`${player.mp}/${player.maxMp}`;
+  document.getElementById('bar-xp').style.width=(player.xp/player.xpNext*100)+'%';
+  document.getElementById('xp-txt').textContent=`${player.xp}/${player.xpNext}`;
+  document.getElementById('gold-txt').textContent=player.gold;
+}
+
+// ===================== MINIMAP =====================
+function drawMinimap() {
+  const mc = document.getElementById('minimap-canvas');
+  const mctx = mc.getContext('2d');
+  mctx.clearRect(0,0,80,80);
+  const tw=80/COLS, th=80/ROWS;
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const t=mapData[r][c];
+      mctx.fillStyle=TILE_COLORS[t]||'#333';
+      mctx.fillRect(c*tw,r*th,tw,th);
+    }
+  }
+  enemies.filter(e=>!e.dead).forEach(e=>{
+    mctx.fillStyle=e.boss?'#ff4444':'#ff8888';
+    mctx.fillRect(e.x/TILE*tw,e.y/TILE*th,tw,th);
+  });
+  npcs.forEach(n=>{
+    mctx.fillStyle='#6de8c5';
+    mctx.fillRect(n.x/TILE*tw,n.y/TILE*th,tw,th);
+  });
+  mctx.fillStyle='#e8c56d';
+  mctx.fillRect(player.x/TILE*tw,player.y/TILE*th,tw+1,th+1);
+}
+
+// ===================== PARTICLES =====================
+function spawnParticles(x, y, color, count=8) {
+  for(let i=0;i<count;i++){
+    particles.push({
+      x:x+TILE/2, y:y+TILE/2,
+      vx:(Math.random()-0.5)*4, vy:(Math.random()-0.5)*4-2,
+      color, life:1, size:Math.random()*4+2,
+    });
+  }
+}
+
+function updateParticles() {
+  particles = particles.filter(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.15; p.life-=0.03;
+    return p.life>0;
+  });
+}
+
+function drawParticles() {
+  particles.forEach(p=>{
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle=p.color;
+    ctx.beginPath();
+    ctx.arc(p.x-cameraX,p.y-cameraY,p.size,0,Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+// ===================== NOTIFY =====================
+function notify(msg) {
+  const el=document.getElementById('notif');
+  el.textContent=msg;
+  el.style.opacity='1';
+  clearTimeout(notify._t);
+  notify._t=setTimeout(()=>{ el.style.opacity='0'; },2500);
+}
+
+// ===================== ENEMY AI =====================
+function updateEnemies(dt) {
+  if(gameState!=='explore') return;
+  enemies.forEach(e=>{
+    if(e.dead) return;
+    e.moveTimer=(e.moveTimer||0)+dt;
+    if(e.moveTimer>1200){
+      e.moveTimer=0;
+      const dist=Math.hypot(player.x-e.x,player.y-e.y);
+      if(dist<TILE*5 && dist>TILE*0.8){
+        const dx=player.x-e.x, dy=player.y-e.y;
+        const len=Math.hypot(dx,dy);
+        const speed=e.boss?1.5:1;
+        const nx=e.x+dx/len*TILE*speed*0.5;
+        const ny=e.y+dy/len*TILE*speed*0.5;
+        if(canMove(nx,e.y)) e.x=nx;
+        if(canMove(e.x,ny)) e.y=ny;
+      } else if(dist>=TILE*5){
+        e.x+=Math.floor(Math.random()*3-1)*TILE;
+        e.y+=Math.floor(Math.random()*3-1)*TILE;
+        e.x=Math.max(TILE,Math.min((COLS-2)*TILE,e.x));
+        e.y=Math.max(TILE,Math.min((ROWS-2)*TILE,e.y));
+      }
+    }
+  });
+}
+
+// ===================== RENDER =====================
+function render() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Draw map
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const px=c*TILE-cameraX, py=r*TILE-cameraY;
+      if(px>-TILE&&px<canvas.width&&py>-TILE&&py<canvas.height){
+        drawTile(mapData[r][c], px, py);
+      }
+    }
+  }
+
+  // Draw chests (mark opened)
+  chests.forEach(ch=>{
+    if(ch.opened){
+      const px=ch.x-cameraX, py=ch.y-cameraY;
+      ctx.fillStyle='#3a2010'; ctx.fillRect(px+4,py+8,TILE-8,TILE-12);
+      ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(px+4,py+8,TILE-8,4);
+    }
+  });
+
+  // Draw NPCs
+  npcs.forEach(n=>{
+    if(n.dead) return;
+    const px=n.x-cameraX, py=n.y-cameraY;
+    ctx.fillStyle='rgba(0,0,0,0.25)';
+    ctx.beginPath();ctx.ellipse(px+TILE/2,py+TILE-4,10,5,0,0,Math.PI*2);ctx.fill();
+    drawSprite(n.sprite, px+5, py+TILE-4);
+    // Name tag
+    const dist=Math.hypot(player.x-n.x,player.y-n.y);
+    if(dist<TILE*2){
+      ctx.fillStyle=n.color||'#e8c56d';
+      ctx.font='9px "Press Start 2P"';
+      ctx.textAlign='center';
+      ctx.fillText(n.name.split(' ')[0],px+TILE/2,py-4);
+      ctx.textAlign='left';
+    }
+  });
+
+  // Draw enemies
+  enemies.forEach(e=>{
+    if(e.dead) return;
+    const px=e.x-cameraX, py=e.y-cameraY;
+    ctx.fillStyle='rgba(0,0,0,0.25)';
+    ctx.beginPath();ctx.ellipse(px+TILE/2,py+TILE-4,10,5,0,0,Math.PI*2);ctx.fill();
+    const scale=e.boss?28:20;
+    drawSprite(e.sprite, px+3, py+TILE-4, scale);
+    // HP bar
+    const bw=TILE-4, bh=4;
+    ctx.fillStyle='#3a0000'; ctx.fillRect(px+2,py,bw,bh);
+    ctx.fillStyle='#e85d5d'; ctx.fillRect(px+2,py,bw*e.currentHp/e.hp,bh);
+    if(e.boss){
+      ctx.strokeStyle='#ff4444'; ctx.lineWidth=1.5;
+      ctx.strokeRect(px-2,py-2,TILE+4,TILE+4);
+    }
+  });
+
+  // Draw player
+  drawPlayer();
+  // Draw particles
+  drawParticles();
+
+  // Map name
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.fillRect(0,0,canvas.width,20);
+  ctx.fillStyle='#e8c56d';
+  ctx.font='10px "Press Start 2P"';
+  ctx.textAlign='center';
+  ctx.fillText(MAPS[currentMap].name, canvas.width/2, 14);
+  ctx.textAlign='left';
+
+  drawMinimap();
+}
+
+// ===================== GAME LOOP =====================
+function gameLoop(ts) {
+  const dt = ts - lastTime;
+  lastTime = ts;
+  if(gameState==='explore'){
+    movePlayer(dt);
+    updateCamera();
+    updateEnemies(dt);
+    updateParticles();
+  }
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+// ===================== INPUT =====================
+window.addEventListener('keydown', e=>{
+  keys[e.key]=true;
+  if(e.key===' '||e.key==='Enter'){
+    e.preventDefault();
+    if(gameState==='dialogue'){ advanceDialogue(); return; }
+    if(gameState==='explore'){ checkInteract(); return; }
+    if(gameState==='levelup'){ closeLevelUp(); return; }
+  }
+  if((e.key==='i'||e.key==='I')){
+    if(gameState==='inventory'){ closeInventory(); return; }
+    if(gameState==='explore'){ openInventory(); return; }
+  }
+  if(e.key==='Escape'){
+    if(gameState==='inventory') closeInventory();
+    if(gameState==='dialogue') closeDialogue();
+  }
+});
+window.addEventListener('keyup', e=>{ keys[e.key]=false; });
+
+// ===================== START =====================
+function startGame() {
+  document.getElementById('title').style.display='none';
+  loadMap('village');
+  gameState='explore';
+  updateHUD();
+  notify('Bem-vindo a Aethon! Fale com o Ancião.');
+  requestAnimationFrame(ts=>{ lastTime=ts; gameLoop(ts); });
+}
+</script>
+</body>
+</html>
